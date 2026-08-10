@@ -10,6 +10,7 @@ import {
   GlobeAltIcon,
   LanguageIcon,
   MapIcon,
+  MapPinIcon,
   UsersIcon,
 } from '@heroicons/react/24/outline'
 import { motion } from 'framer-motion'
@@ -27,6 +28,21 @@ const SEDE_OPTIONS: SedeOption[] = [
   { value: 'Milano Pasteur', label: 'Milano Pasteur' },
   { value: 'Melzo', label: 'Melzo' },
 ]
+
+const SEDI = [
+  {
+    name: 'YES! Melzo',
+    address: 'Via Cristoforo Colombo, 6/C, 20066 Melzo MI',
+  },
+  {
+    name: 'YES! Milano Lambrate',
+    address: 'Via Giovanni Pacini, 39, 20131 Milano MI',
+  },
+  {
+    name: 'YES! Milano Pasteur',
+    address: 'Via Marco Aurelio, 8, 20127 Milano MI',
+  },
+] as const
 
 const STEPS = [
   {
@@ -273,6 +289,37 @@ export function ConsulenzaPage() {
             onSedeChange={setSelectedSede}
           />
         </div>
+      </Section>
+
+      <Section id="dove-trovarci" className="bg-surface" decor="section">
+        <h2 className="text-center text-3xl font-extrabold text-ink md:text-4xl">
+          Dove trovarci
+        </h2>
+        <motion.div
+          className="mt-8 grid gap-5 md:grid-cols-3"
+          variants={stagger}
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true, amount: 0.15 }}
+        >
+          {SEDI.map((sede) => (
+            <motion.article
+              key={sede.name}
+              className="group flex h-full flex-col rounded-card border border-black/5 bg-surface p-6 shadow-card transition duration-300 hover:-translate-y-1 hover:border-accent/20 hover:shadow-[0_14px_40px_rgba(20,20,27,0.12)]"
+              variants={fadeUp}
+            >
+              <div className="flex items-start gap-3">
+                <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent/10 text-accent transition group-hover:bg-accent group-hover:text-white">
+                  <MapPinIcon className="h-5 w-5" aria-hidden="true" />
+                </span>
+                <div>
+                  <h3 className="text-lg font-bold text-ink">{sede.name}</h3>
+                  <p className="mt-1 text-base text-muted">{sede.address}</p>
+                </div>
+              </div>
+            </motion.article>
+          ))}
+        </motion.div>
       </Section>
 
       <Footer />
