@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { motion } from 'framer-motion'
 import { PhoneInput } from 'react-international-phone'
+import { useNavigate } from 'react-router-dom'
 import { submitLead } from '../lib/submitLead'
 
 export type SedeOption = {
@@ -26,12 +27,13 @@ type LeadFormProps = {
   showLingua?: boolean
   /** Pre-selezione Interesse (es. da UTM campaign) */
   defaultInteresse?: string
-  whatsappUrl?: string
   submitLabel?: string
   className?: string
   /** Pre-selezione sede (es. da SedeCard) */
   selectedSede?: string
   onSedeChange?: (value: string) => void
+  /** Path di redirect dopo submit riuscito */
+  thankYouPath?: string
 }
 
 type FormStatus = 'idle' | 'submitting' | 'success' | 'error'
@@ -63,12 +65,13 @@ export function LeadForm({
   showInteresse = false,
   showLingua = false,
   defaultInteresse = '',
-  whatsappUrl,
   submitLabel = 'Invia',
   className = '',
   selectedSede,
   onSedeChange,
+  thankYouPath = '/grazie',
 }: LeadFormProps) {
+  const navigate = useNavigate()
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [email, setEmail] = useState('')
@@ -128,32 +131,11 @@ export function LeadForm({
         privacy_consent: true,
         submitted_at: new Date().toISOString(),
       })
-      setStatus('success')
+      sessionStorage.setItem('yes-lead-submitted', '1')
+      navigate(thankYouPath, { replace: true })
     } catch {
       setStatus('error')
     }
-  }
-
-  if (status === 'success') {
-    return (
-      <div
-        className={`rounded-card border border-black/5 bg-surface p-6 text-center shadow-card sm:p-8 ${className}`.trim()}
-        role="status"
-      >
-        <h3 className="text-xl font-bold text-ink">Grazie!</h3>
-        <p className="mt-2 text-muted">Ti ricontatteremo a breve.</p>
-        {whatsappUrl ? (
-          <a
-            href={whatsappUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-6 inline-flex min-h-11 items-center justify-center rounded-full bg-brand px-6 py-3 text-sm font-bold text-white transition hover:bg-brand-dark"
-          >
-            Scrivici su WhatsApp
-          </a>
-        ) : null}
-      </div>
-    )
   }
 
   const fieldClass =
