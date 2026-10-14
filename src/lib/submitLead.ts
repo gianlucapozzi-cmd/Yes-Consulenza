@@ -15,8 +15,9 @@ const DEFAULT_WEBHOOK_URL =
  * Usa text/plain per evitare preflight CORS con Apps Script.
  */
 export async function submitLead(data: Record<string, unknown>) {
-  const url =
-    (import.meta.env.VITE_WEBHOOK_URL as string | undefined) || DEFAULT_WEBHOOK_URL
+  // Sempre il webhook Sheets+Relatia. Non usare VITE_WEBHOOK_URL in prod:
+  // su Vercel può restare un vecchio URL solo-Sheets che bypassa Relatia.
+  const url = DEFAULT_WEBHOOK_URL
 
   const res = await fetch(url, {
     method: 'POST',
