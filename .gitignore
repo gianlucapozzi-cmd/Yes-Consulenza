@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# Relatia / Apps Script secrets (mai committare il token)
+google-apps-script/Config.gs
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

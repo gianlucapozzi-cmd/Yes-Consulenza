@@ -5,7 +5,9 @@ declare global {
 }
 
 /**
- * Invia il lead al webhook (Google Apps Script → foglio "consulenza").
+ * Invia il lead al webhook Google Apps Script, che:
+ * - salva sul foglio "consulenza"
+ * - crea il contatto in Relatia nella pipeline YES GROUP
  * Usa text/plain per evitare preflight CORS con Apps Script.
  */
 export async function submitLead(data: Record<string, unknown>) {
