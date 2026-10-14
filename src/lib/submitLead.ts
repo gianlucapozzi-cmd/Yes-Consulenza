@@ -4,24 +4,19 @@ declare global {
   }
 }
 
+/** Webhook Apps Script: stesso foglio Google "consulenza" + Relatia pipeline YES GROUP */
+const DEFAULT_WEBHOOK_URL =
+  'https://script.google.com/macros/s/AKfycbwFMck9uhTMXCWz0cIYbOiL2e1cJTnMlmYiJxhJqjV8SYBYYDYg48vfKjXl9-EZgsXk/exec'
+
 /**
  * Invia il lead al webhook Google Apps Script, che:
- * - salva sul foglio "consulenza"
+ * - salva sul foglio "consulenza" (invariato)
  * - crea il contatto in Relatia nella pipeline YES GROUP
  * Usa text/plain per evitare preflight CORS con Apps Script.
  */
 export async function submitLead(data: Record<string, unknown>) {
-  const url = import.meta.env.VITE_WEBHOOK_URL as string | undefined
-
-  if (!url) {
-    if (import.meta.env.DEV) {
-      console.warn(
-        '[submitLead] VITE_WEBHOOK_URL non configurato. Aggiungi l’URL Apps Script in .env.local',
-      )
-      return
-    }
-    throw new Error('webhook_missing')
-  }
+  const url =
+    (import.meta.env.VITE_WEBHOOK_URL as string | undefined) || DEFAULT_WEBHOOK_URL
 
   const res = await fetch(url, {
     method: 'POST',

@@ -40,19 +40,27 @@ function doPost(e) {
     ensureHeaders_(sheet)
     sheet.appendRow([firstName, lastName, email, phone, sede, interesse, lingua])
 
-    var relatia = createRelatiaLead_({
-      first_name: firstName,
-      last_name: lastName,
-      email: email,
-      phone: phone,
-      sede: sede,
-      interesse: interesse,
-      lingua: lingua,
-      source: String(data.source || 'landing-consulenza'),
-      campaign: String(data.campaign || ''),
-    })
+    // Il foglio Google resta sempre la fonte primaria: se Relatia fallisce
+    // il lead è comunque salvato e la landing riceve ok.
+    var relatia = null
+    var relatiaError = null
+    try {
+      relatia = createRelatiaLead_({
+        first_name: firstName,
+        last_name: lastName,
+        email: email,
+        phone: phone,
+        sede: sede,
+        interesse: interesse,
+        lingua: lingua,
+        source: String(data.source || 'landing-consulenza'),
+        campaign: String(data.campaign || ''),
+      })
+    } catch (relatiaErr) {
+      relatiaError = String(relatiaErr)
+    }
 
-    return json_({ ok: true, relatia: relatia })
+    return json_({ ok: true, sheet: true, relatia: relatia, relatia_error: relatiaError })
   } catch (err) {
     return json_({ ok: false, error: String(err) })
   }
