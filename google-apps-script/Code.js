@@ -23,10 +23,43 @@ var RELATIA_BASE = 'https://yesgroup.relatiacrm.com'
 var RELATIA_PIPELINE_ID = 'c48f8c37-6163-448d-a0da-7451e174232d'
 var RELATIA_STAGE_ID = '6db9e34b-0823-42c6-b22e-4cdec5716233' // NUOVO CONTATTO
 
+// Campi Extra Relatia (scheda contatto) — key → id
+var RELATIA_CUSTOM_FIELDS = {
+  sede: '04dee82c-dbd7-4af6-84e4-b30cda48fb5e',
+  interesse: 'da068d85-ce7f-471c-997b-0c92db38f539',
+  lingua_interesse: 'ed954358-9ffc-461c-b7d2-1618ccb3582d',
+  meta_campaign_name: '8072d34a-8941-41bf-afb4-12573bba66f8',
+  meta_adset_name: '2481f792-73dd-40f7-b841-1bdff7f28dad',
+  meta_ad_name: '19db6baf-b702-4021-ae51-ac191d2a5b9a',
+}
+
+var META_UTM_SOURCES = {
+  fb: true,
+  ig: true,
+  facebook: true,
+  instagram: true,
+  meta: true,
+  an: true,
+  msg: true,
+  th: true,
+}
+
 function doPost(e) {
   try {
     var raw = e && e.postData && e.postData.contents ? e.postData.contents : '{}'
     var data = JSON.parse(raw)
+
+    if (data.target === 'istituti-leonardo-sync') {
+      return json_(syncLeonardoNewRows())
+    }
+
+    if (data.target === 'istituti-leonardo') {
+      return handleLeonardoPost_(data)
+    }
+
+    if (data.target === 'yes-diploma') {
+      return handleYesDiplomaPost_(data)
+    }
 
     var firstName = String(data.first_name || data.nome || '')
     var lastName = String(data.last_name || data.cognome || '')
@@ -55,6 +88,12 @@ function doPost(e) {
         lingua: lingua,
         source: String(data.source || 'landing-consulenza'),
         campaign: String(data.campaign || ''),
+        utm_source: String(data.utm_source || ''),
+        utm_campaign: String(data.utm_campaign || ''),
+        utm_term: String(data.utm_term || ''),
+        utm_content: String(data.utm_content || ''),
+        fbclid: String(data.fbclid || ''),
+        gclid: String(data.gclid || ''),
       })
     } catch (relatiaErr) {
       relatiaError = String(relatiaErr)
@@ -93,14 +132,74 @@ function getRelatiaToken_() {
   throw new Error('RELATIA_TOKEN mancante: configura Config.gs o Script Properties')
 }
 
+function isMetaLead_(lead) {
+  if (lead.fbclid) return true
+  var source = String(lead.utm_source || '')
+    .trim()
+    .toLowerCase()
+  return Boolean(source && META_UTM_SOURCES[source])
+}
+
+function buildCustomValues_(lead) {
+  var values = []
+  if (lead.sede) {
+    values.push({
+      custom_field: RELATIA_CUSTOM_FIELDS.sede,
+      value_text: lead.sede,
+    })
+  }
+  if (lead.interesse) {
+    values.push({
+      custom_field: RELATIA_CUSTOM_FIELDS.interesse,
+      value_text: lead.interesse,
+    })
+  }
+  if (lead.lingua) {
+    values.push({
+      custom_field: RELATIA_CUSTOM_FIELDS.lingua_interesse,
+      value_text: lead.lingua,
+    })
+  }
+  if (isMetaLead_(lead)) {
+    if (lead.utm_campaign) {
+      values.push({
+        custom_field: RELATIA_CUSTOM_FIELDS.meta_campaign_name,
+        value_text: lead.utm_campaign,
+      })
+    }
+    if (lead.utm_term) {
+      values.push({
+        custom_field: RELATIA_CUSTOM_FIELDS.meta_adset_name,
+        value_text: lead.utm_term,
+      })
+    }
+    if (lead.utm_content) {
+      values.push({
+        custom_field: RELATIA_CUSTOM_FIELDS.meta_ad_name,
+        value_text: lead.utm_content,
+      })
+    }
+  }
+  return values
+}
+
 function createRelatiaLead_(lead) {
   var token = getRelatiaToken_()
-  var contactRes = relatiaFetch_('POST', '/api/contacts/', {
+  var payload = {
     first_name: lead.first_name,
     last_name: lead.last_name,
     email: lead.email,
     phone: lead.phone,
-  }, token)
+  }
+  if (lead.gclid) {
+    payload.gclid = lead.gclid
+  }
+  var customValues = buildCustomValues_(lead)
+  if (customValues.length) {
+    payload.custom_values_create = customValues
+  }
+
+  var contactRes = relatiaFetch_('POST', '/api/contacts/', payload, token)
 
   var contactId = contactRes && contactRes.id
   if (!contactId) throw new Error('Relatia: contatto non creato')
@@ -110,19 +209,6 @@ function createRelatiaLead_(lead) {
     pipeline_id: RELATIA_PIPELINE_ID,
     stage_id: RELATIA_STAGE_ID,
   }, token)
-
-  var noteLines = []
-  if (lead.sede) noteLines.push('Sede: ' + lead.sede)
-  if (lead.interesse) noteLines.push('Interesse: ' + lead.interesse)
-  if (lead.lingua) noteLines.push('Lingua: ' + lead.lingua)
-  if (lead.source) noteLines.push('Source: ' + lead.source)
-  if (lead.campaign) noteLines.push('Campaign: ' + lead.campaign)
-  if (noteLines.length) {
-    relatiaFetch_('POST', '/api/notes/', {
-      contact: contactId,
-      content: noteLines.join('\n'),
-    }, token)
-  }
 
   return { contact_id: contactId, pipeline_id: RELATIA_PIPELINE_ID }
 }

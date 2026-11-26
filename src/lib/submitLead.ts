@@ -1,3 +1,5 @@
+import { getAttribution } from './attribution'
+
 declare global {
   interface Window {
     fbq?: (...args: unknown[]) => void
@@ -18,12 +20,14 @@ export async function submitLead(data: Record<string, unknown>) {
   // Sempre il webhook Sheets+Relatia. Non usare VITE_WEBHOOK_URL in prod:
   // su Vercel può restare un vecchio URL solo-Sheets che bypassa Relatia.
   const url = DEFAULT_WEBHOOK_URL
+  const attribution = getAttribution()
+  const payload = { ...data, ...attribution }
 
   const res = await fetch(url, {
     method: 'POST',
     // text/plain evita il preflight CORS con Google Apps Script
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify(data),
+    body: JSON.stringify(payload),
   })
 
   // Apps Script può rispondere 200 dopo redirect; se il body non è leggibile
