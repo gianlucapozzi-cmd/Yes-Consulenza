@@ -12,6 +12,7 @@ var LEONARDO_HEADERS = [
   'EMAIL',
   'NUMERO DI TELFONO',
   'PERCORSO STUDI',
+  'ricezione contatto',
   'NOTE',
 ]
 var LEONARDO_PIPELINE_ID = 'c82d2483-6667-430c-af10-45944f86f5d7'
@@ -19,6 +20,19 @@ var LEONARDO_STAGE_ID = '43526eae-fea9-45be-88fa-0b24ddfd76de' // NUOVO CONTATTO
 var LEONARDO_CUSTOM_FIELDS = {
   percorso: '13345987-9aa3-4f6c-8f7b-11f53ea3277b',
   note: 'e75a84fe-f9dc-4075-b829-53e907319772',
+  meta_campaign_name: '8072d34a-8941-41bf-afb4-12573bba66f8',
+  meta_adset_name: '2481f792-73dd-40f7-b841-1bdff7f28dad',
+  meta_ad_name: '19db6baf-b702-4021-ae51-ac191d2a5b9a',
+}
+var LEONARDO_META_SOURCES = {
+  fb: true,
+  ig: true,
+  facebook: true,
+  instagram: true,
+  meta: true,
+  an: true,
+  msg: true,
+  th: true,
 }
 
 function handleLeonardoPost_(data) {
@@ -31,7 +45,15 @@ function handleLeonardoPost_(data) {
 
   var sheet = getLeonardoSheet_()
   ensureLeonardoHeaders_(sheet)
-  sheet.appendRow([firstName, lastName, email, phone, percorso, note])
+  sheet.appendRow([
+    firstName,
+    lastName,
+    email,
+    phone,
+    percorso,
+    leonardoReceivedAt_(),
+    note,
+  ])
 
   var relatia = null
   var relatiaError = null
@@ -43,6 +65,12 @@ function handleLeonardoPost_(data) {
       phone: phone,
       percorso: percorso,
       note: note,
+      utm_source: String(data.utm_source || ''),
+      utm_campaign: String(data.utm_campaign || ''),
+      utm_term: String(data.utm_term || ''),
+      utm_content: String(data.utm_content || ''),
+      fbclid: String(data.fbclid || ''),
+      gclid: String(data.gclid || ''),
     })
   } catch (relatiaErr) {
     relatiaError = String(relatiaErr)
@@ -81,7 +109,7 @@ function syncLeonardoNewRows() {
     }
     if (lastRow <= cursor) return { ok: true, cursor: cursor, lastRow: lastRow, created: [] }
 
-    var values = sheet.getRange(cursor + 1, 1, lastRow - cursor, 6).getValues()
+    var values = sheet.getRange(cursor + 1, 1, lastRow - cursor, 7).getValues()
     var created = []
     var processedUntil = cursor
     for (var i = 0; i < values.length; i++) {
@@ -91,7 +119,7 @@ function syncLeonardoNewRows() {
       var email = String(values[i][2] || '').trim()
       var phone = values[i][3] === '' || values[i][3] === null ? '' : String(values[i][3]).trim()
       var percorso = String(values[i][4] || '').trim()
-      var note = String(values[i][5] || '').trim()
+      var note = String(values[i][6] || '').trim()
       if (!email) {
         processedUntil = rowNumber
         continue
@@ -148,6 +176,10 @@ function removeLeonardoProbeRows_(sheet) {
   }
 }
 
+function leonardoReceivedAt_() {
+  return Utilities.formatDate(new Date(), 'Europe/Rome', 'dd/MM/yyyy HH:mm')
+}
+
 function getLeonardoSheet_() {
   var ss = SpreadsheetApp.openById(LEONARDO_SPREADSHEET_ID)
   var sheet = ss.getSheetByName(LEONARDO_SHEET_NAME)
@@ -161,6 +193,16 @@ function ensureLeonardoHeaders_(sheet) {
   sheet.getRange(1, 1, 1, LEONARDO_HEADERS.length).setValues([LEONARDO_HEADERS])
 }
 
+function leonardoText_(value) {
+  return String(value || '').trim()
+}
+
+function leonardoIsMetaLead_(lead) {
+  if (leonardoText_(lead.fbclid)) return true
+  var source = leonardoText_(lead.utm_source).toLowerCase()
+  return Boolean(source && LEONARDO_META_SOURCES[source])
+}
+
 function createLeonardoRelatiaLead_(lead) {
   var token = getRelatiaToken_()
   var payload = {
@@ -169,18 +211,46 @@ function createLeonardoRelatiaLead_(lead) {
     email: lead.email,
     phone: lead.phone,
   }
+  var gclid = leonardoText_(lead.gclid)
+  if (gclid) payload.gclid = gclid
+
   var customValues = []
-  if (lead.percorso) {
+  var percorso = leonardoText_(lead.percorso)
+  if (percorso) {
     customValues.push({
       custom_field: LEONARDO_CUSTOM_FIELDS.percorso,
-      value_text: lead.percorso,
+      value_text: percorso,
     })
   }
-  if (lead.note) {
+  var note = leonardoText_(lead.note)
+  if (note) {
     customValues.push({
       custom_field: LEONARDO_CUSTOM_FIELDS.note,
-      value_text: lead.note,
+      value_text: note,
     })
+  }
+  if (leonardoIsMetaLead_(lead)) {
+    var campaign = leonardoText_(lead.utm_campaign)
+    var adset = leonardoText_(lead.utm_term)
+    var ad = leonardoText_(lead.utm_content)
+    if (campaign) {
+      customValues.push({
+        custom_field: LEONARDO_CUSTOM_FIELDS.meta_campaign_name,
+        value_text: campaign,
+      })
+    }
+    if (adset) {
+      customValues.push({
+        custom_field: LEONARDO_CUSTOM_FIELDS.meta_adset_name,
+        value_text: adset,
+      })
+    }
+    if (ad) {
+      customValues.push({
+        custom_field: LEONARDO_CUSTOM_FIELDS.meta_ad_name,
+        value_text: ad,
+      })
+    }
   }
   if (customValues.length) payload.custom_values_create = customValues
 
