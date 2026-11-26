@@ -1,7 +1,7 @@
 /**
  * YES! Consulenza — Webhook
  * - Scrive sul foglio Google "consulenza"
- * - Crea contatto + deal nella pipeline Relatia "YES GROUP"
+ * - Crea contatto + deal Relatia (pipeline in base alla sede)
  *
  * Deploy: clasp push && clasp deploy
  * Il token Relatia sta in Config.gs (gitignored).
@@ -17,11 +17,30 @@ var HEADERS = [
   'sede',
   'interesse',
   'lingua di interesse',
+  'ricezione contatto',
 ]
 
 var RELATIA_BASE = 'https://yesgroup.relatiacrm.com'
-var RELATIA_PIPELINE_ID = 'c48f8c37-6163-448d-a0da-7451e174232d'
+var RELATIA_PIPELINE_ID = 'c48f8c37-6163-448d-a0da-7451e174232d' // YES GROUP
 var RELATIA_STAGE_ID = '6db9e34b-0823-42c6-b22e-4cdec5716233' // NUOVO CONTATTO
+
+var RELATIA_PIPELINES = {
+  melzo: {
+    pipeline_id: 'a0758c5c-d201-4307-b634-bbf8a41ac3d2',
+    stage_id: '3f8384ff-b9da-451b-a263-3b7e9eff0188',
+    pipeline_name: 'YES MELZO',
+  },
+  milano: {
+    pipeline_id: '3ed60760-d6db-4575-bd71-4bdb3b6bb9da',
+    stage_id: 'f2f21733-1cf8-410c-b64b-e59cddc6f20e',
+    pipeline_name: 'YES MILANO',
+  },
+  group: {
+    pipeline_id: RELATIA_PIPELINE_ID,
+    stage_id: RELATIA_STAGE_ID,
+    pipeline_name: 'YES GROUP',
+  },
+}
 
 // Campi Extra Relatia (scheda contatto) — key → id
 var RELATIA_CUSTOM_FIELDS = {
@@ -68,10 +87,20 @@ function doPost(e) {
     var sede = String(data.sede || '')
     var interesse = String(data.interesse || '')
     var lingua = String(data.lingua || data['lingua di interesse'] || '')
+    var ricezione = formatRicezione_()
 
     var sheet = getConsulenzaSheet_()
     ensureHeaders_(sheet)
-    sheet.appendRow([firstName, lastName, email, phone, sede, interesse, lingua])
+    sheet.appendRow([
+      firstName,
+      lastName,
+      email,
+      phone,
+      sede,
+      interesse,
+      lingua,
+      ricezione,
+    ])
 
     // Il foglio Google resta sempre la fonte primaria: se Relatia fallisce
     // il lead è comunque salvato e la landing riceve ok.
@@ -183,8 +212,22 @@ function buildCustomValues_(lead) {
   return values
 }
 
+function formatRicezione_() {
+  return Utilities.formatDate(new Date(), 'Europe/Rome', 'dd/MM/yyyy HH:mm')
+}
+
+function resolvePipelineFromSede_(sede) {
+  var s = String(sede || '').toLowerCase()
+  if (s.indexOf('melzo') !== -1) return RELATIA_PIPELINES.melzo
+  if (s.indexOf('pasteur') !== -1 || s.indexOf('lambrate') !== -1) {
+    return RELATIA_PIPELINES.milano
+  }
+  return RELATIA_PIPELINES.group
+}
+
 function createRelatiaLead_(lead) {
   var token = getRelatiaToken_()
+  var pipeline = resolvePipelineFromSede_(lead.sede)
   var payload = {
     first_name: lead.first_name,
     last_name: lead.last_name,
@@ -204,13 +247,49 @@ function createRelatiaLead_(lead) {
   var contactId = contactRes && contactRes.id
   if (!contactId) throw new Error('Relatia: contatto non creato')
 
-  relatiaFetch_('POST', '/api/contacts/bulk-create-deals/', {
+  var dealPayload = {
     contact_ids: [contactId],
-    pipeline_id: RELATIA_PIPELINE_ID,
-    stage_id: RELATIA_STAGE_ID,
-  }, token)
+    pipeline_id: pipeline.pipeline_id,
+    stage_id: pipeline.stage_id,
+  }
+  relatiaFetch_('POST', '/api/contacts/bulk-create-deals/', dealPayload, token)
+  renameDealIfNeeded_(contactId, pipeline, token)
 
-  return { contact_id: contactId, pipeline_id: RELATIA_PIPELINE_ID }
+  return {
+    contact_id: contactId,
+    pipeline_id: pipeline.pipeline_id,
+    stage_id: pipeline.stage_id,
+    pipeline_name: pipeline.pipeline_name,
+  }
+}
+
+function renameDealIfNeeded_(contactId, pipeline, token) {
+  if (!pipeline || pipeline.pipeline_name === 'YES GROUP') return
+
+  var found = relatiaFetch_(
+    'GET',
+    '/api/deals/?contact=' + encodeURIComponent(contactId),
+    null,
+    token,
+  )
+  var results = (found && found.results) || found || []
+  if (!Array.isArray(results)) results = []
+
+  for (var i = 0; i < results.length; i++) {
+    var deal = results[i]
+    if (!deal || !deal.id) continue
+    var matchesPipeline =
+      deal.pipeline_id === pipeline.pipeline_id ||
+      deal.pipeline === pipeline.pipeline_id ||
+      deal.pipeline_name === pipeline.pipeline_name
+    if (!matchesPipeline) continue
+
+    var name = String(deal.name || deal.title || '')
+    if (name.indexOf('YES GROUP') === -1) continue
+
+    var nextName = name.split('YES GROUP').join(pipeline.pipeline_name)
+    relatiaFetch_('PATCH', '/api/deals/' + deal.id + '/', { name: nextName }, token)
+  }
 }
 
 function relatiaFetch_(method, path, body, token) {
